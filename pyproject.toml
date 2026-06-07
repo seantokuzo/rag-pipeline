@@ -16,6 +16,18 @@ dev = [
     "ruff>=0.15.16",
 ]
 
+# Intel-Mac (x86_64-macOS) compatibility caps — see docs/decisions/ADR-003.
+# The modern ML stack dropped x86_64-macOS wheels; these pin the last versions
+# that still ship one, plus two runtime pins torch 2.2.2 requires. Transitive
+# only — direct deps (chromadb, sentence-transformers 5.5.1) are unchanged.
+[tool.uv]
+constraint-dependencies = [
+    "onnxruntime<=1.23.2",   # last cp312 x86_64-macOS wheel; chromadb needs >=1.14.1
+    "torch<=2.2.2",          # last cp312 x86_64-macOS wheel; ST needs >=1.11.0
+    "numpy<2",               # torch 2.2.2 built against numpy 1.x ("Numpy is not available")
+    "transformers<5",        # transformers 5.x requires torch>=2.4 at runtime
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
