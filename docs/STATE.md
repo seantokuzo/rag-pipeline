@@ -2,7 +2,7 @@
 
 > Current state of the project. Updated every session. **Read this first when resuming.**
 
-**Last Updated:** 2026-06-07 — **Phase 1 (Session 2) — steps 1–2 DONE** (environment + corpus; `config` + `ingest`). Env provisioned (CPython 3.12.13, Intel-Mac caps per ADR-003, sentence-transformers 5.5.1). 3-product Gutenberg corpus downloaded + validated. `src/rag_exp/config.py` + `ingest.py` written, ruff-clean, smoke-tested (3 `SourceDoc`s, boilerplate trimmed). **Step 3 (chunk) is next.** _Prior:_ Phase 0 scaffolding complete (Session 1).
+**Last Updated:** 2026-06-07 — **Phase 1 (Session 3) — step 3 (chunk) DONE.** `src/rag_exp/chunk.py` written (recursive token-accurate splitter → `Chunk` records; stable ids `product_id:source:ordinal`; metadata inherited), ruff-clean, smoke-tested: **990 chunks** (detective 317 · science 563 · shakespeare 110), token len min 6 / max 510 / mean 396, **0 over the 512 cap**, ids unique & all stamped. Explainers updated (chunking real-counts + tuning-knobs; new `embedding.md`). **Step 4 (embed) is next.** _Prior:_ steps 1–2 (env + corpus + `config` + `ingest`, Session 2), Phase 0 scaffolding (Session 1).
 
 **Repo:** https://github.com/seantokuzo/rag-pipeline — work on branch `phase-1/env-and-corpus` (Session 2, pushed); `main` has Phase 0 scaffolding.
 
@@ -10,22 +10,22 @@
 
 ## Current Phase
 
-**Phase 0 — Scaffolding: done.** **Phase 1 — Local pipeline: in-progress** — steps 1–2 of 11 done (env + corpus; config + ingest); **step 3 (chunk) next.**
+**Phase 0 — Scaffolding: done.** **Phase 1 — Local pipeline: in-progress** — steps 1–3 of 11 done (env + corpus; config + ingest; chunk); **step 4 (embed) next.**
 
 ### ⏭️ Fresh-session handoff — resume here
 
-**What's done:** Phase 0 scaffolding (Session 1) + Phase 1 steps 1–2 (Session 2 — env + Intel-Mac caps per ADR-003; corpus downloaded/validated; `config.py` + `ingest.py` written, ruff-clean, smoke-tested). All committed + pushed to `phase-1/env-and-corpus`. Nothing to finish in steps 1–2.
+**What's done:** Phase 0 scaffolding (Session 1) + Phase 1 steps 1–2 (Session 2 — env/ADR-003 caps, corpus, `config.py` + `ingest.py`) + step 3 (Session 3 — `chunk.py`: recursive token-accurate splitter → `Chunk` records, ruff-clean, smoke-tested at **990 chunks**). Steps 1–2 pushed; step 3 committed locally on `phase-1/env-and-corpus`. Nothing to finish in steps 1–3.
 
-**▶ ACTIVE — Phase 1, the local pipeline. The spec is `docs/spec-phase-1.md` — read it; it's the binding build order.** Build order (each ≈ one commit): ~~1) corpus prep~~ ✅ · ~~2) config+ingest~~ ✅ · **3) chunk ◀ next** · 4) embed · 5) store/chroma · 6) index · 7) security · 8) retrieve · 9) **leak demo** · 10) eval + cross-tenant test · 11) poke experiments.
+**▶ ACTIVE — Phase 1, the local pipeline. The spec is `docs/spec-phase-1.md` — read it; it's the binding build order.** Build order (each ≈ one commit): ~~1) corpus prep~~ ✅ · ~~2) config+ingest~~ ✅ · ~~3) chunk~~ ✅ · **4) embed ◀ next** · 5) store/chroma · 6) index · 7) security · 8) retrieve · 9) **leak demo** · 10) eval + cross-tenant test · 11) poke experiments.
 
-**▷ NEXT STEP — chunk (Phase 1, step 3). Read `docs/spec-phase-1.md` Part B + the `chunking-lab` skill (`.agents/skills/chunking-lab/`) FIRST (skill protocol).**
-1. **`chunk` module** — split each `SourceDoc` into `Chunk` records via `RecursiveCharacterTextSplitter.from_tiktoken_encoder(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)` (langchain-text-splitters + tiktoken; token-accurate, so 512 = tokens not chars).
-2. **`Chunk` dataclass** = `{id, text, product_id, source}`; **stable id** = `f"{product_id}:{source}:{ordinal}"` (the eval golden set depends on these surviving re-indexing).
-3. Inherit `product_id`/`source` from the parent `SourceDoc` onto every chunk. Then step 4 (embed).
+**▷ NEXT STEP — embed (Phase 1, step 4). Read `docs/spec-phase-1.md` Part C + `docs/explainers/embedding.md` FIRST.**
+1. **`embed` module** — an `Embedder` wrapping sentence-transformers `BAAI/bge-small-en-v1.5`, `device="cpu"`, `normalize_embeddings=True`. Two methods: `embed_documents(texts)` → `encode_document()` (chunks), `embed_query(text)` → `encode_query()` (queries). **Parity rule:** chunks and queries embed the *same* way; bge's asymmetric query prefix is handled by the two ST methods — don't mix them.
+2. **Run the deferred truncation check** — count each chunk's *bge* (WordPiece) token length; warn on any > 512 (silent truncation otherwise). tiktoken max was 510, so expect few/none — but verify, don't assume.
+3. Output = `list[list[float]]` (384-dim, unit-length) aligned 1:1 with the chunks. Then step 5 (store/chroma) writes vectors + metadata into Chroma.
 
-**Inputs ready:** `from rag_exp.ingest import load_products` → 3 `SourceDoc`s (detective / science / shakespeare); `from rag_exp.config import CHUNK_SIZE, CHUNK_OVERLAP`.
+**Inputs ready:** `from rag_exp.chunk import chunk_documents` + `from rag_exp.ingest import load_products` → **990 `Chunk`s**; `from rag_exp.config import MODEL`.
 
-**Env is READY** — `uv run …` works; do NOT re-run install or corpus download. ⚠️ The first embed run (step 4) downloads the `bge-small` model (~130 MB).
+**Env is READY** — `uv run …` works; do NOT re-run install or corpus download. ⚠️ **The first embed run downloads `bge-small` (~130 MB)** from Hugging Face, then caches it. Embedding ~990 chunks on CPU is a one-time minute-or-few.
 
 **Remember the working style:** this is a learning collaboration — explain Python/RAG choices, move one step at a time, present options at decision points, don't autonomously build the whole phase. **Explainer ritual:** before a handoff the human may ask "how does the next step work" — explain in-session *and* write/update `docs/explainers/<concept>.md` (see that folder's README). **Env gotcha:** complex `&&`/loop bash chains have silently died mid-run on this box — prefer simple single-statement commands (git multi-statement scripts are fine).
 
@@ -71,10 +71,10 @@
 - **Governance:** `CLAUDE.md` (master), `docs/PLANNING.md`, `docs/SECURITY.md`, `docs/spec-phase-1.md`, `docs/SESSION-GUIDE.md`.
 - **Knowledge capture:** `docs/decisions/` (ADR system + ADR-001, ADR-002, ADR-003), `docs/history/` (retrospective log + template).
 - **Claude Code:** `.claude/settings.json` (wires 3 hooks), `.claude/hooks/` (pre-tool-security, post-edit-format→ruff, post-response-notify→Stop, with ntfy mobile option), `.claude/rules/` (planning-doc-homes, access-control, rag-conventions), `.claude/agents/` (access-control-reviewer, rag-researcher), `.agents/skills/` (rag-eval-harness, chunking-lab, find-skills, roadmap-management), `.claude/templates/agent-TEMPLATE.md`.
-- **Python:** `pyproject.toml` (uv, src layout, pinned deps, `[tool.uv]` Intel-Mac caps), `.python-version`, `.gitignore`, `.env.example`, `README.md`, `src/rag_exp/{__init__,config,ingest}.py`, `tests/__init__.py`. `uv.lock` committed; `.venv` provisioned (Python 3.12.13).
+- **Python:** `pyproject.toml` (uv, src layout, pinned deps, `[tool.uv]` Intel-Mac caps), `.python-version`, `.gitignore`, `.env.example`, `README.md`, `src/rag_exp/{__init__,config,ingest,chunk}.py`, `tests/__init__.py`. `uv.lock` committed; `.venv` provisioned (Python 3.12.13).
 - **Corpus:** `products/{detective,shakespeare,science}/` — READMEs + validated Gutenberg `.txt` (Adventures of Sherlock Holmes / Hamlet / On the Origin of Species), committed (public-domain, frozen for stable chunk ids).
-- **Pipeline so far:** `config.py` (spec Appendix defaults, project-root paths) + `ingest.py` (`load_products` → frozen `SourceDoc{text,product_id,source}`, Gutenberg trim, product_id hard-error). Smoke-tested: 3 docs.
-- **Not yet built:** `src/rag_exp/` modules for chunk / embed / store / index / security / retrieve (step 3+); no tests yet (the cross-tenant leak test lands with security + retrieve).
+- **Pipeline so far:** `config.py` (spec Appendix defaults, project-root paths) + `ingest.py` (`load_products` → frozen `SourceDoc{text,product_id,source}`, Gutenberg trim, product_id hard-error) + `chunk.py` (`chunk_documents`/`chunk_document` → frozen `Chunk{id,text,product_id,source}` via recursive tiktoken splitter; stable ids, inherited metadata; size/overlap as sweepable kwargs). Smoke-tested: 3 docs → 990 chunks.
+- **Not yet built:** `src/rag_exp/` modules for embed / store / index / security / retrieve (step 4+); no tests yet (the cross-tenant leak test lands with security + retrieve).
 
 ## Decisions Made
 - ADR-001 — Phase-1 local stack. ADR-002 — pooled access-control model. ADR-003 — Intel-Mac (x86_64) dependency compatibility caps. (See `docs/decisions/`.)
@@ -92,3 +92,4 @@
 ### Session log
 - **2026-06-06 — Session 1 (Phase 0):** Mined `seantokuzo-mcp` + `get-sean-done`; researched 2026 RAG best practices; scaffolded the full RAG/Python workspace + planning/spec docs. Decisions: ADR-001, ADR-002, local-first review, split `.claude/` + `.agents/skills/` layout. Skills moved to `.agents/skills/` for skills.sh compat; `git init` + pushed to github.com/seantokuzo/rag-pipeline (`main`).
 - **2026-06-06/07 — Session 2 (Phase 1, steps 1–2):** Step 1 — `uv sync` hit an Intel-Mac (x86_64) wheel wall (onnxruntime via chromadb + torch via sentence-transformers dropped x86_64-macOS wheels; numpy-2 / transformers-5 runtime traps); a probe subagent verified the fix end-to-end → **ADR-003** `[tool.uv]` caps (torch 2.2.2 / numpy 1.26.4 / transformers 4.57.6 / onnxruntime 1.23.2; ST held 5.5.1). Downloaded + validated the 3-product Gutenberg corpus (boilerplate at line 27). Step 2 — wrote `config.py` (spec Appendix defaults, project-root paths) + `ingest.py` (`load_products` → frozen `SourceDoc`, Gutenberg trim, product_id hard-error); ruff-clean, smoke-tested (3 docs). Decided to **leave** the 9-line Gutenberg "several editions" note in the science corpus (benign). Committed + pushed to `phase-1/env-and-corpus`. Handoff → step 3 (chunk).
+- **2026-06-07 — Session 3 (Phase 1, step 3 — chunk):** Wrote `chunk.py` — `RecursiveCharacterTextSplitter.from_tiktoken_encoder` (cl100k_base, hard 512-token cap), frozen `Chunk{id,text,product_id,source}`, stable ids `product_id:source:ordinal`, metadata inherited from `SourceDoc`; size/overlap are keyword params so `chunking-lab` can sweep them. Smoke-tested: **990 chunks** (317/563/110), token len 6–510 (mean 396), 0 over cap, ids unique & all stamped. Updated explainers (chunking real-counts + tuning-knobs section; new `embedding.md`); registered embed in the explainer index. Fixed a stray pre-existing E501 in `tests/__init__.py`. Handoff → step 4 (embed).
