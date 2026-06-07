@@ -32,5 +32,6 @@ The textbook rule is *append-only*: never edit an accepted ADR, only supersede i
 |---|-------|--------|
 | [001](ADR-001-phase1-local-stack.md) | Phase 1 local stack — Chroma + bge-small + uv | Accepted |
 | [002](ADR-002-pooled-access-control.md) | Pooled access-control model — shared collection + metadata pre-filter | Accepted |
+| [003](ADR-003-intel-mac-compat-caps.md) | Intel-Mac (x86_64) dependency compatibility caps | Accepted |
 
 New ADR? Copy [`ADR-template.md`](ADR-template.md) and bump the number.
