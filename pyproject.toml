@@ -1,0 +1,34 @@
+[project]
+name = "rag-exp"
+version = "0.0.1"
+description = "A from-scratch RAG learning lab: ingest → chunk → embed → vector store → retrieve, with a server-side entitlement filter as the security boundary."
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.9",
+    "sentence-transformers>=5.5.1",
+    "tiktoken>=0.13.0",
+    "langchain-text-splitters>=1.1.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "ruff>=0.15.16",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rag_exp"]

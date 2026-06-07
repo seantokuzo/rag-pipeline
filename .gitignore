@@ -1,0 +1,73 @@
+# ============================================================
+#  rag-exp — .gitignore
+#  Corpus text under products/**/*.txt is TRACKED on purpose
+#  (public-domain; keeps the leak demo reproducible).
+# ============================================================
+
+# ── Python / packaging ──────────────────────────────────────
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+build/
+dist/
+# NOTE: uv.lock IS committed — do not ignore it.
+
+# ── Lint / type / test caches ───────────────────────────────
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ── Jupyter ─────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── Secrets / env (keep the .env.example template) ──────────
+.env
+.env.*
+!.env.example
+.azure/
+
+# ── Claude Code (machine-local, not shared) ─────────────────
+.claude/settings.local.json
+
+# ── RAG / vector-store artifacts (rebuildable) ──────────────
+.chroma/
+chroma_db/
+*.chroma/
+
+# ── Eval (golden sets ARE committed; run outputs are not) ───
+/outputs/
+eval/results/
+
+# ── ML model caches & weights (never commit weights) ────────
+.cache/
+hf_cache/
+models/
+*.safetensors
+*.gguf
+*.onnx
+*.pt
+*.bin
+
+# ── Logs ────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Editors / OS ────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# ── Node (only if tooling drops it) ─────────────────────────
+node_modules/
