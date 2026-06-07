@@ -20,4 +20,5 @@ Before each handoff, the human asks **"how does the next step work?"** → Claud
 ## Index
 
 - [chunking](./chunking.md) — slicing documents into embeddable, security-tagged pieces.
-- _(coming: embedding · vector-store & indexing · retrieval & filtering · evaluation)_
+- [embedding](./embedding.md) — turning chunks into 384-d vectors; the query/document parity rule.
+- _(coming: vector-store & indexing · retrieval & filtering · evaluation)_

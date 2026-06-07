@@ -69,9 +69,32 @@ Chunk + vector[384]                                      │
 Chroma row { id, document:text, embedding, metadata:{product_id, source} }
 ```
 
-## Rough scale (this project)
+## Rough scale (this project — measured)
 
-At ~4 chars/token and 512-token chunks, our 3 books (~178K–933K chars) produce a **ballpark of ~800 chunks total** (a bit more in practice, since the recursive splitter breaks early at paragraph boundaries). Exact counts come out when we run it.
+At ~4 chars/token and 512-token chunks, our 3 books produce **990 chunks total**: detective 317 · science 563 · shakespeare 110. Counts track book size (science is biggest at ~933K chars; Hamlet smallest at ~178K). Per-chunk token lengths land at **min 6 · max 510 · mean 396** — the mean sits ~77% of the 512 budget because the recursive splitter breaks *early* at paragraph boundaries rather than packing each chunk to the brim. (The original ~800 estimate undershot; those early breaks add chunks.)
+
+## Tuning the knobs (when retrieval feels off) 🎛️
+
+Chunking is the highest-leverage RAG knob — and it's **empirical**. You don't guess the right settings; you *measure* them. When retrieval seems off — it misses an answer you *know* is in the corpus, returns half-thoughts, or that tiny trailing chunk starts mattering — these are the levers. All are (or will be) parameters of `chunk_document(...)`, so the [`chunking-lab` skill](../../.agents/skills/chunking-lab/SKILL.md) can sweep them.
+
+| Knob | In our code | Default | What turning it does |
+|---|---|---|---|
+| **size** (tokens) | `chunk_size` | 512 | **Smaller** → more precise hits, but more fragments & a thought can split across chunks. **Bigger** → more context per chunk, but a fuzzier vector (one fingerprint averaging more ideas) & you risk the 512 truncation wall. |
+| **overlap** (tokens) | `chunk_overlap` | 0 | **>0** repeats the last N tokens of each chunk at the start of the next, so an answer straddling a boundary survives — at the cost of a bigger index & near-duplicate hits. Not a free win. |
+| **strategy** | recursive (hardcoded today) | recursive | Swap *how* boundaries are chosen: recursive (structure) → **semantic** (embedding-aware) → **contextual** (an LLM blurb prepended per chunk). More power, more cost. |
+
+**Rules of thumb (2026):** factoid/lookup corpora like small chunks (64–256); prose like ours (Holmes, Darwin, Hamlet) likes 512–1024 and often *peaks ~1024*. Reach for **size** first, **overlap** only if a *specific* failing query turns out to be an answer cut in half, and **strategy** upgrades last (semantic ≈ 14× slower for modest gains; contextual retrieval cuts failures ~35% but costs an LLM pass — earn them with data).
+
+**The method — the A/B loop** (this is the whole game):
+
+1. Change **one** knob; hold the rest fixed.
+2. **Re-chunk *and* re-index** — chunk ids shift, so the store must be rebuilt. Never compare a new chunker against a stale index.
+3. Run the **eval harness** → `recall@k` / `MRR` / `nDCG`. The *number* decides, not the vibe.
+4. Keep the winner; write up what you tried + the numbers in `docs/history/`.
+
+> ⚠️ **You can't tune blind — and the measuring instrument isn't built yet.** The eval harness lands at **step 10**. Until then we hold the locked defaults (recursive · 512 · 0) and don't twiddle on a hunch. *Measure, then tune.*
+
+**The specific "tiny trailing chunk" case** (our `min = 6` tokens): almost certainly cosmetic — a 6-token vector simply won't match much, so it rarely surfaces. *If* the eval ever shows it dragging precision, the fix isn't a global knob but a targeted **min-chunk merge**: fold any sub-threshold tail back into its predecessor. We'd add that only when the data asks — premature, it's just complexity.
 
 ## TL;DR
 
