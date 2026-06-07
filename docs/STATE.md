@@ -4,6 +4,8 @@
 
 **Last Updated:** 2026-06-06 — **Phase 0 (Session 1) — scaffolding COMPLETE.** The full Claude Code workspace + planning/spec docs are in place (CLAUDE.md, docs/, `.claude/` agents+skills+hooks+rules, Python skeleton, corpus folders). No pipeline code yet by design. Next session starts Phase 1 (the local pipeline). _Prior:_ — (project start).
 
+**Repo:** https://github.com/seantokuzo/rag-pipeline — `main` (scaffolding pushed 2026-06-06).
+
 ---
 
 ## Current Phase
@@ -77,4 +79,4 @@
 ---
 
 ### Session log
-- **2026-06-06 — Session 1 (Phase 0):** Mined `seantokuzo-mcp` + `get-sean-done`; researched 2026 RAG best practices; scaffolded the full RAG/Python workspace + planning/spec docs. Decisions: ADR-001, ADR-002, local-first review, native `.claude/` layout.
+- **2026-06-06 — Session 1 (Phase 0):** Mined `seantokuzo-mcp` + `get-sean-done`; researched 2026 RAG best practices; scaffolded the full RAG/Python workspace + planning/spec docs. Decisions: ADR-001, ADR-002, local-first review, split `.claude/` + `.agents/skills/` layout. Skills moved to `.agents/skills/` for skills.sh compat; `git init` + pushed to github.com/seantokuzo/rag-pipeline (`main`).
