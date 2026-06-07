@@ -13,6 +13,7 @@ Keep planning content to these homes (don't spawn `NOTES.md` / `TODO.md` / `IDEA
 - `docs/spec-*.md` — active build specs
 - `docs/decisions/` — ADRs (locked, one per decision)
 - `docs/history/` — per-phase / per-experiment retrospectives
+- `docs/explainers/` — concept "how it works" explainers (step-agnostic, one per process; tracked, not gitignored)
 
 Data files for a skill co-locate with the skill (e.g. `.agents/skills/<name>/`), not in `docs/`.
 

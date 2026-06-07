@@ -27,7 +27,7 @@
 
 **Env is READY** — `uv run …` works; do NOT re-run install or corpus download. ⚠️ The first embed run (step 4) downloads the `bge-small` model (~130 MB).
 
-**Remember the working style:** this is a learning collaboration — explain Python/RAG choices, move one step at a time, present options at decision points, don't autonomously build the whole phase. **Env gotcha:** complex `&&`/loop bash chains have silently died mid-run on this box — prefer simple single-statement commands (git multi-statement scripts are fine).
+**Remember the working style:** this is a learning collaboration — explain Python/RAG choices, move one step at a time, present options at decision points, don't autonomously build the whole phase. **Explainer ritual:** before a handoff the human may ask "how does the next step work" — explain in-session *and* write/update `docs/explainers/<concept>.md` (see that folder's README). **Env gotcha:** complex `&&`/loop bash chains have silently died mid-run on this box — prefer simple single-statement commands (git multi-statement scripts are fine).
 
 ### Source of truth (obey these, in order)
 - `docs/spec-phase-1.md` — **the** binding build spec for what we're doing now.

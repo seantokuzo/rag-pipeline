@@ -157,7 +157,8 @@ If we later push to GitHub, we can add a single `@claude` review Action; the pri
 
 ## Docs discipline
 
-- **Doc homes** (keep planning content to these; see `.claude/rules/planning-doc-homes.md`): `docs/PLANNING.md` (roadmap), `docs/STATE.md` (live context + handoff), `docs/SECURITY.md` (threat model), `docs/spec-*.md` (active specs), `docs/decisions/` (ADRs, locked), `docs/history/` (retrospectives). Don't spawn `NOTES.md`/`TODO.md`/`IDEAS.md`.
+- **Doc homes** (keep planning content to these; see `.claude/rules/planning-doc-homes.md`): `docs/PLANNING.md` (roadmap), `docs/STATE.md` (live context + handoff), `docs/SECURITY.md` (threat model), `docs/spec-*.md` (active specs), `docs/decisions/` (ADRs, locked), `docs/history/` (retrospectives), `docs/explainers/` (concept "how it works" docs). Don't spawn `NOTES.md`/`TODO.md`/`IDEAS.md`.
+- **Explainer series** (`docs/explainers/`, step-agnostic, tracked/not-ignored): plain-English "how does this work" docs, one per concept (e.g. `chunking.md`). **Process:** before each handoff the human asks how the next step works; Claude explains *in-session* **and** writes/updates the matching explainer at the same time. Understanding-oriented — distinct from specs (how-to-build) and ADRs (why-decided). See `docs/explainers/README.md`.
 - **Data files co-locate with their skill**, not in `docs/` (e.g. a skill's reference data lives under `.agents/skills/<name>/`).
 - **Status enum** (use these exact words): `queued` · `in-progress` · `blocked` · `done` · `deferred` · `cancelled`.
 - **End every session by updating `docs/STATE.md`** so the next session resumes cleanly.
