@@ -177,11 +177,17 @@ Print them side by side. Optionally a third user (`root`) to show full-corpus re
 ### H.0 Scope
 A golden-query harness (the `rag-eval-harness` skill) + the mandatory cross-tenant leak test.
 
-### H.1 Golden set
+### H.1 Golden set — anchored to source text (ADR-004)
+
+Relevance is keyed to a verbatim **quote** from the source, never to a chunk id (ids shift under any re-chunk, so an id-pinned set can't survive the sweeps — ADR-004):
 ```python
-# golden.json: [{"q": "...", "user": "root", "relevant_ids": ["detective:...:3", ...]}, ...]
+# golden.json: [
+#   {"q": "...", "user": "root", "product_id": "detective",
+#    "source": "adventures-of-sherlock-holmes",
+#    "relevant_quote": "<short verbatim snippet from the source>"}, ...
+# ]
 ```
-Hand-author ~5–10 queries/product against the `root` user (full corpus) with known relevant chunk ids.
+Hand-author ~5–10 queries/product against the `root` user (full corpus). At eval time a chunk counts as relevant if it **contains the quote** (whitespace-normalized), computed against whatever chunking is live — so the golden set is authored once and survives every sweep. Keep quotes short + mid-passage so they fit one chunk at the smallest swept size. (Span/offset anchoring is the documented rigor upgrade — ADR-004 Alternatives.)
 
 ### H.2 Metrics
 `recall@k`, `hit-rate@k`, `MRR`, `nDCG@k` — mean over the golden set. This is the regression gate for chunk/embedding/retrieval changes.
@@ -192,7 +198,10 @@ For each non-root user, fire queries that *should* surface other products, asser
 ---
 
 ## Part I — Poke experiments (learning, write up in `docs/history/`)
-- **Chunk size sweep** — 256 / 512 / 1024 vs the eval metrics.
+
+Run these as a **cost-tiered sweep**, not ad-hoc (ADR-004 §2; procedure in the `chunking-lab` skill): sweep the **cheap** query-time axes (`k`, later rerank/hybrid) against one fixed index first, then the **expensive** re-embed axes (chunk size/overlap/model), each with a corpus-sample pre-pass before a full embed. Expensive axes on the outer loop, cheap on the inner; one variable per comparison.
+
+- **Chunk size sweep** — 256 / 512 / 1024 vs the eval metrics (the headline expensive-axis sweep). Small matrix: `size ∈ {256,512,1024} × k ∈ {3,5,10}` = 3 re-embeds, 9 evals.
 - **Exact vs paraphrased query** — show dense retrieval handling paraphrase, and where exact-term queries motivate hybrid/BM25.
 - **Scores** — print similarity scores to build intuition for thresholds.
 
@@ -210,7 +219,7 @@ For each non-root user, fire queries that *should* surface other products, asser
 - [ ] At least the chunk-size and exact-vs-paraphrase experiments written up.
 
 ### J.2 Open questions
-See PLANNING §Open Questions (reranking, local hybrid, generation, golden-set size). Resolve via ADRs as they come up.
+**Resolved:** golden-set *anchoring* → source-text/quote (ADR-004). Still open — see PLANNING §Open Questions (reranking, local hybrid, generation, golden-set *size*). Resolve via ADRs as they come up.
 
 ---
 

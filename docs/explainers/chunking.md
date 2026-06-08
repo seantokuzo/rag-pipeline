@@ -50,9 +50,9 @@ Chunk { id, text, product_id, source }
 - **`product_id` / `source`** — metadata: filtering + provenance.
 - **`id`** — the primary key: `product_id:source:ordinal`, e.g. `detective:adventures-of-sherlock-holmes:0`, `:1`, `:2`…
 
-**Ids are deterministic on purpose.** The eval harness will assert "the right answer to query X is chunk `detective:…:42`." If ids were random or shifted every re-run, that golden set would break. So id = `product_id` + `source` + position — stable across re-indexing as long as the source text and chunk settings don't change.
+**Ids are deterministic on purpose.** `id = product_id + source + position`, so the same text + same chunk settings always reproduce the same id — which lets the vector store re-index without churn and lets a retrieved hit cite its exact source slice. **Note:** the *eval golden set* is **not** keyed to these ids — it anchors to a verbatim source quote instead, so it survives a re-chunk that renumbers every ordinal (see [ADR-004](../decisions/ADR-004-eval-methodology.md)). Stable ids keep the *store* consistent at a fixed config; the source anchor keeps the *eval* reproducible across configs — two different jobs.
 
-> This is also why we *freeze* the corpus text and don't casually re-trim it: changing the text shifts chunk boundaries → shifts ordinals → breaks ids.
+> This is also why we *freeze* the corpus text and don't casually re-trim it: changing the source text shifts chunk boundaries (renumbering ids) **and** can invalidate the verbatim quotes the eval golden set anchors to (ADR-004). The frozen corpus is the shared ground both stand on.
 
 ## How the data shape evolves
 
@@ -88,9 +88,11 @@ Chunking is the highest-leverage RAG knob — and it's **empirical**. You don't 
 **The method — the A/B loop** (this is the whole game):
 
 1. Change **one** knob; hold the rest fixed.
-2. **Re-chunk *and* re-index** — chunk ids shift, so the store must be rebuilt. Never compare a new chunker against a stale index.
+2. **Re-chunk → re-embed → re-index** — chunk ids *and* vectors both change, so the store must be rebuilt. Never compare a new chunker against a stale index.
 3. Run the **eval harness** → `recall@k` / `MRR` / `nDCG`. The *number* decides, not the vibe.
 4. Keep the winner; write up what you tried + the numbers in `docs/history/`.
+
+*(That's the unit. The **cost-tiered** version — sweep cheap query-time knobs against one fixed index first, sample before full re-embeds — lives in the [`chunking-lab` skill](../../.agents/skills/chunking-lab/SKILL.md) and [ADR-004](../decisions/ADR-004-eval-methodology.md) §2. Re-embedding is the expensive part; don't pay it for a knob that didn't change the vectors.)*
 
 > ⚠️ **You can't tune blind — and the measuring instrument isn't built yet.** The eval harness lands at **step 10**. Until then we hold the locked defaults (recursive · 512 · 0) and don't twiddle on a hunch. *Measure, then tune.*
 
@@ -98,4 +100,4 @@ Chunking is the highest-leverage RAG knob — and it's **empirical**. You don't 
 
 ## TL;DR
 
-Chunking slices whole documents into bite-size, **security-tagged** text pieces **in memory** — no vectors, no DB (those come at embed/index). The `product_id` stamp is what keeps retrieval leak-proof; the stable `id` is what keeps the eval reproducible.
+Chunking slices whole documents into bite-size, **security-tagged** text pieces **in memory** — no vectors, no DB (those come at embed/index). The `product_id` stamp is what keeps retrieval leak-proof; the stable `id` keeps the *store* consistent at a fixed config — while the eval stays reproducible by anchoring its golden set to the **source text**, not to ids ([ADR-004](../decisions/ADR-004-eval-methodology.md)).
