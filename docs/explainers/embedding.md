@@ -31,7 +31,7 @@ Because everything is normalized, *"points the same way" = "means the same thing
 
 bge makes the rule sharp, because **bge is asymmetric** — it was trained to embed a *question* and a *passage* differently. A query gets a hidden instruction prefix (roughly *"Represent this sentence for searching relevant passages:"*); a document gets none. The point of that asymmetry: nudge the query vector to land near the **passages that answer it**, not near **other questions that look like it**.
 
-sentence-transformers 5.x hands us this for free with two methods, and our `Embedder` wraps exactly them:
+sentence-transformers 5.x gives us two methods for this, and our `Embedder` wraps exactly them:
 
 ```python
 class Embedder:
@@ -40,7 +40,11 @@ class Embedder:
 ```
 
 - **`encode_document()`** — for the chunks (no query prefix). Used at **index** time.
-- **`encode_query()`** — for the user's search text (adds the prefix). Used at **retrieve** time.
+- **`encode_query()`** — for the user's search text (prepends the prefix). Used at **retrieve** time.
+
+⚠️ **But it is *not* automatic for this model — you have to wire it.** `encode_query()` only prepends a prefix if the model carries a `"query"` entry in its prompts config, and `bge-small-en-v1.5` as published on Hugging Face **ships none** (verified — its `config_sentence_transformers.json` has no `prompts` key, and it has no `Router` module either). Out of the box, `encode_query()` would add *nothing* — you'd still have parity, but with the asymmetry silently switched off, squandering the whole reason for picking bge. So our `Embedder` **registers bge's documented instruction itself** — `prompts={"query": "Represent this sentence for searching relevant passages: "}` (string straight from BAAI's model card) — on the `SentenceTransformer`. Now `encode_query()` finds the `"query"` prompt and prepends it; `encode_document()` finds no document prompt and stays bare. *That one registration is the line that makes the asymmetry real.*
+
+We **proved** it fires: embedding the identical text both ways gives `cosine(doc, query) = 0.9424` — distinctly below 1.0 (it would be exactly 1.0 if the prefix never applied). That 0.94, not 1.0, *is* the asymmetry, measured.
 
 **The rule in one line:** chunks go through `embed_documents`, queries through `embed_query`, and *nothing* mixes the two. Embed a query as if it were a document and you've quietly tanked your recall — with green tests and a clean-looking pipeline.
 
@@ -53,7 +57,9 @@ class Embedder:
 
 ## The truncation check we deferred from chunking 🔎
 
-Recall the chunking note: tiktoken (our **sizing** tokenizer) ≠ bge's **WordPiece** tokenizer, so "≤ 512 tiktoken tokens" is a close approximation, not a guarantee. **Embed is where the real limit bites.** bge silently drops anything past **512 of *its own* tokens**. So this stage is where we actually *verify*: count bge's real token lengths and flag any chunk that would be truncated. If some exceed 512, we lower the chunk-size target to leave margin and re-chunk. (We expect few or none — our tiktoken max was 510 — but "expect" isn't "verified.")
+Recall the chunking note: tiktoken (our **sizing** tokenizer) ≠ bge's **WordPiece** tokenizer, so "≤ 512 tiktoken tokens" is a close approximation, not a guarantee. **Embed is where the real limit bites.** bge silently drops anything past **512 of *its own* tokens** (special tokens included). So this stage is where we actually *verify*: count bge's real token lengths (`Embedder.count_tokens`, truncation off) and flag any chunk that would be truncated.
+
+**Verified result (990 chunks):** bge token length ran min 9 / mean 378 / **max 520** — and **2 chunks came in over 512** (`detective:adventures-of-sherlock-holmes:107` and `:146`). So the approximation *does* leak: tiktoken counted those two at ≤512, bge counts them at 513–520. We **accepted** it (a learning-lab call): only 2 of 990 chunks, each losing ~6 tokens off the tail, and — crucially — the store keeps each chunk's **full text**; only the *vector* is computed on the truncated input, so at most those two vectors slightly under-weight their last few words. The text returned by retrieval is always complete. The airtight alternative, if it ever costs an eval hit, is to size chunks with bge's *own* tokenizer (`from_huggingface_tokenizer`) so "512" is measured in the units that enforce it.
 
 ## Metadata & security: untouched here 🔐
 
@@ -75,4 +81,4 @@ The chunk's **text** is what gets embedded; the resulting **vector** is what ret
 
 ## TL;DR
 
-Embedding runs each chunk through bge-small (CPU, ~130 MB on first download) to get a **384-float, unit-length vector** — a coordinate in "meaning space" where **cosine angle = similarity**. The one rule that matters: **parity** — chunks via `encode_document()`, queries via `encode_query()`, never mixed, or recall silently dies (bge's asymmetric query prefix is *why* the two methods exist). This step also **verifies** nothing exceeds bge's real 512-token limit (the check deferred from chunking). Vectors land in the store next; the security tags ride along untouched.
+Embedding runs each chunk through bge-small (CPU, ~130 MB on first download) to get a **384-float, unit-length vector** — a coordinate in "meaning space" where **cosine angle = similarity**. The one rule that matters: **parity** — chunks via `encode_document()`, queries via `encode_query()`, never mixed, or recall silently dies. bge's asymmetric query prefix is *why* the two methods exist — but it isn't automatic for this model: we **register** the query instruction ourselves so it fires (proved: doc-vs-query cosine 0.94, not 1.0). This step also runs the bge **512-token check** deferred from chunking — which caught 2 chunks just over, accepted as negligible. Vectors land in the store next; the security tags ride along untouched.
