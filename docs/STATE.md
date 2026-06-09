@@ -18,7 +18,7 @@
 
 **▶ ACTIVE — Phase 1, the local pipeline. The spec is `docs/spec-phase-1.md` — read it; it's the binding build order.** Build order (each ≈ one commit): ~~1) corpus prep~~ ✅ · ~~2) config+ingest~~ ✅ · ~~3) chunk~~ ✅ · ~~4) embed~~ ✅ · **5) store/chroma ◀ next** · 6) index · 7) security · 8) retrieve · 9) **leak demo** · 10) eval + cross-tenant test · 11) poke experiments.
 
-**▷ NEXT STEP — store/chroma (Phase 1, step 5). Read `docs/spec-phase-1.md` Part D FIRST.**
+**▷ NEXT STEP — store/chroma (Phase 1, step 5). Read `docs/spec-phase-1.md` Part D + `docs/explainers/vector-store.md` FIRST.**
 1. **`store/` package — the one real abstraction:** `store/base.py` defines a `VectorStore` Protocol (`upsert(chunks, embeddings)` / `query(embedding, k, where) -> list[Hit]`; `Hit = {id, text, product_id, source, score}`), `store/chroma.py` implements it. Phase 2 adds `azure.py` behind the same Protocol — pipeline + security invariant stay put.
 2. **Chroma specifics:** `chromadb.PersistentClient(path=str(CHROMA_PATH))` → `get_or_create_collection(COLLECTION, metadata={"hnsw:space": SPACE})` — ⚠️ **cosine, not L2** (Chroma defaults to L2). `col.add(ids, embeddings, documents, metadatas=[{"product_id","source"}])` — **stamp product_id/source on every row** (un-securable otherwise). `col.query(query_embeddings=[emb], n_results=k, where=...)` — `where` is the entitlement pre-filter (step 7 builds it server-side; the store just passes it through, never invents it).
 3. **Don't** post-filter, don't accept a caller filter here, don't let L2 sneak in. Map Chroma's cosine *distance* → a `score` in `Hit` (smaller distance = closer; pick distance vs `1 − distance` and document the choice).
