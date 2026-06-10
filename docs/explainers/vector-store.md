@@ -31,7 +31,7 @@ row = {
 Writing them in is one call:
 
 ```python
-col.add(
+col.upsert(
     ids=[c.id for c in chunks],
     embeddings=embeddings,                # from embed_documents()
     documents=[c.text for c in chunks],   # FULL text, untruncated
@@ -46,7 +46,7 @@ Note **all four lists are positional** — index *i* of each must describe the s
 When you create the collection you choose its **distance function**, and **Chroma defaults to L2** (straight-line / Euclidean distance). For our **normalized** vectors that default is wrong — we must set **cosine** explicitly:
 
 ```python
-col = client.get_or_create_collection("corpus", metadata={"hnsw:space": "cosine"})
+col = client.get_or_create_collection("corpus", configuration={"hnsw": {"space": "cosine"}})
 ```
 
 Why this matters, and why it's a *silent* trap:
@@ -55,7 +55,7 @@ Why this matters, and why it's a *silent* trap:
 - With normalized vectors, L2 and cosine happen to *rank* neighbours the same way — so a wrong L2 setting **won't crash and won't obviously break**; it just makes the distance *numbers* wrong, which quietly corrupts any score threshold, any "is this match good enough?" cutoff, and any comparison across runs.
 - **The space is fixed at creation.** You can't change a collection's metric later — set it wrong and *every* query for the life of that index is subtly off. There's no error, just slow rot. This is exactly the kind of bug this lab exists to make you feel.
 
-> ⚠️ Build-time check: the *exact* kwarg for setting the space has shifted across Chroma versions (older `metadata={"hnsw:space": …}` vs a newer typed `configuration=`). We'll confirm the right form against the installed **chromadb 1.5.x** when we build — the *concept* is what's permanent: **cosine, chosen explicitly, once, at creation.**
+> ✅ Verified (chromadb **1.5.9**): use the typed `configuration={"hnsw": {"space": "cosine"}}` — the current 1.0+ form. The older `metadata={"hnsw:space": …}` still works but is the deprecated legacy form (and stores the space inconsistently in `collection.metadata`), so we don't use it. The *concept* is what's permanent: **cosine, chosen explicitly, once, at creation** — it cannot be changed afterward.
 
 ## HNSW — the index under the hood
 
@@ -113,12 +113,12 @@ Why here and nowhere else: Phase 1→2 genuinely **swaps the store** (Chroma →
 
 "Indexing" is just the **one-time write**: run `ingest → chunk → embed → upsert` to populate the collection, then queries read it many times. Two things make re-indexing safe:
 
-- **Stable ids** (`product_id:source:ordinal`) mean `upsert` **overwrites** a chunk in place instead of duplicating it — so re-running the index after a code change is idempotent, not additive.
+- **Stable ids** (`product_id:source:ordinal`) + **`upsert`** (not `add`) mean re-writing a chunk **overwrites** it in place instead of duplicating — so re-running the index after a code change is idempotent, not additive. (Verified footgun: Chroma's `add()` *silently keeps the first write* on a duplicate id — no error, no update — which is exactly why the store uses `upsert()`.)
 - It's a **write-once, read-many** shape: the expensive embed happens at index time; queries are cheap lookups against the built index.
 
 ## The Hit shape & the score (distance, inverted)
 
-A query returns parallel lists (`ids`, `distances`, `documents`, `metadatas`); we zip them into `Hit` records. One gotcha in the number: Chroma returns a **cosine distance**, where **smaller = closer** (`0` = identical direction, up to `2` = opposite) — the *inverse* of the cosine *similarity* (where bigger = closer) from the embedding explainer. So when we expose a `score`, we decide and **document** which convention it is (raw distance, or `1 − distance` to make bigger-is-better). Pick one and be consistent, or every ranking readout lies.
+A query returns parallel lists (`ids`, `distances`, `documents`, `metadatas`) — nested one level per query, so since we send a single query we read index `[0]` of each; we zip them into `Hit` records. One gotcha in the number: Chroma returns a **cosine distance**, where **smaller = closer** (`0` = identical direction, up to `2` = opposite) — the *inverse* of the cosine *similarity* (where bigger = closer) from the embedding explainer. **Our choice (locked):** `score = 1 − distance`, i.e. plain **cosine similarity** (`1.0` = identical, bigger = closer) — so "higher is better" holds everywhere downstream and the score reads in the same units as the embedding step's cosine numbers (the 0.9424 doc-vs-query readout). Pick one and be consistent, or every ranking readout lies.
 
 ## How the data shape evolves
 

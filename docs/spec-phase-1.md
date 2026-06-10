@@ -122,15 +122,22 @@ class VectorStore(Protocol):
 ### D.2 Chroma specifics
 ```python
 client = chromadb.PersistentClient(path="./.chroma")
-col = client.get_or_create_collection("corpus", metadata={"hnsw:space": "cosine"})
-col.add(ids=[...], embeddings=[...], documents=[...],
-        metadatas=[{"product_id": c.product_id, "source": c.source} for c in chunks])
+# chromadb 1.5.x: configuration= is the current form; legacy metadata={"hnsw:space":...} is
+# deprecated. embedding_function=None — we hand Chroma our own bge vectors; it never embeds.
+col = client.get_or_create_collection(
+    "corpus", configuration={"hnsw": {"space": "cosine"}}, embedding_function=None
+)
+# upsert, NOT add: add() silently keeps the first write on a duplicate id; upsert overwrites,
+# so re-indexing on stable ids stays idempotent.
+col.upsert(ids=[...], embeddings=[...], documents=[...],
+           metadatas=[{"product_id": c.product_id, "source": c.source} for c in chunks])
 col.query(query_embeddings=[emb], n_results=k, where=where)   # where = the entitlement filter
 ```
 `where` operators available: `$eq $ne $gt $gte $lt $lte $in $nin $and $or`.
 
 ### D.3 Gotchas
 - **Default space is L2** — set cosine explicitly (decision #3).
+- **Distance → score:** a cosine collection returns *distance* in [0, 2] (0 = identical); expose `score = 1 - distance` (cosine similarity, bigger = closer).
 - `.chroma/` is git-ignored (it's a rebuildable artifact).
 
 ---
