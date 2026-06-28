@@ -2,7 +2,7 @@
 
 > The heart of this project. Authorization in RAG is a **server-side, pre-retrieval metadata filter** sourced from a trusted entitlements map, applied **inside** the vector query, and **structurally un-overridable** by the caller. Un-entitled content is never retrieved, so the (optional) synthesis step can never see it.
 
-**Status:** Design of record. **Last Updated:** 2026-06-06 (Phase 0 scaffolding).
+**Status:** Design of record. **Last Updated:** 2026-06-27 (locked empty-entitlement handling — §5 option (a): deny before the data layer + mock upsell).
 
 ---
 
@@ -104,11 +104,21 @@ Security starts at index time. Every chunk is stamped `{product_id, source, chun
 `security.py` is the only place the entitlement filter is built:
 
 ```python
+class NoEntitlementsError(Exception):
+    """No licensed products for this user — carries a mock upsell message."""
+
+# Mock production "you have no licenses" response (the friendly denial we render).
+NO_LICENSE_MESSAGE = (
+    "You have no active licenses. To purchase access, visit www.my-fake-ass-product.derp"
+)
+
 def entitlement_filter(user_id: str) -> dict:
     allowed = ENTITLEMENTS.get(user_id, [])
     if not allowed:
-        # no entitlements → match nothing, never "match everything"
-        return {"product_id": {"$in": []}}
+        # Fail closed BEFORE the data layer: no entitlements → deny, never an open filter.
+        # We do NOT return {"$in": []} — chromadb 1.5.x rejects an empty $in, and raising
+        # here short-circuits the embed + query entirely for an unentitled user (option a).
+        raise NoEntitlementsError(NO_LICENSE_MESSAGE)
     return {"product_id": {"$in": allowed}}
 
 def compose(entitlement: dict, caller_filter: dict | None) -> dict:
@@ -119,12 +129,13 @@ def compose(entitlement: dict, caller_filter: dict | None) -> dict:
 
 `retrieve.py` enforces it and refuses to proceed without it (defense against T1):
 ```python
-flt = compose(entitlement_filter(user_id), caller_filter)
+flt = compose(entitlement_filter(user_id), caller_filter)  # raises NoEntitlementsError if none
 assert "product_id" in str(flt), "refusing to query without an entitlement constraint"
 results = store.query(query_embedding, k=k, where=flt)   # filter INSIDE the query
+# NoEntitlementsError propagates to the caller (demo/API), which renders NO_LICENSE_MESSAGE.
 ```
 
-**Fail closed:** an unknown user or empty entitlement returns an empty filter set (`$in: []` → no matches), never an open one.
+**Fail closed:** an unknown user or empty entitlement is **denied before the store** — `entitlement_filter` raises `NoEntitlementsError` (rendered as a mock "no licenses" upsell), never an open filter and never an empty `$in` (which chromadb 1.5.x rejects).
 
 ### Backend mapping (same invariant, two engines)
 | Concern | Phase 1 — Chroma | Phase 2 — Azure AI Search |
@@ -138,7 +149,7 @@ results = store.query(query_embedding, k=k, where=flt)   # filter INSIDE the que
 
 1. **The demo** (`demo.py`) — the no-filter vs. filter comparison from §2, printed side by side with `product_id` and similarity scores so the leak is visible to the eye.
 2. **The cross-tenant test** (`tests/`, pytest) — for each user, fire queries designed to surface *other* products' content and assert no result's `product_id` is outside that user's entitlements. This test is **mandatory** the moment `retrieve.py` + `security.py` exist; a passing suite without it is a false sense of safety.
-3. **Negative path** — assert that an unknown user retrieves nothing (fail-closed), and that a caller-supplied filter can narrow but not widen results.
+3. **Negative path** — assert that an unknown/unentitled user is **denied before the store** (raises `NoEntitlementsError`, no query issued), and that a caller-supplied filter can narrow but not widen results.
 
 ### Known caveat to teach (not a Phase-1 blocker)
 Very selective metadata filters combined with ANN graph traversal (HNSW) can create "recall holes" — the graph may not reach enough matching nodes. Negligible at learning-lab corpus size, but it's the right concept and a reason production systems sometimes prefer silos for highly selective tenants.

@@ -150,7 +150,7 @@ The entitlements map + the server-side filter builder + the compose/fail-closed 
 ### E.1 Contract
 ```python
 ENTITLEMENTS: dict[str, list[str]]            # {user_id: [product_id]}
-def entitlement_filter(user_id: str) -> dict   # {"product_id": {"$in": allowed}}; empty→$in:[] (fail closed)
+def entitlement_filter(user_id: str) -> dict   # {"product_id": {"$in": allowed}}; empty → raise NoEntitlementsError (deny before store; see SECURITY.md §5)
 def compose(entitlement: dict, caller_filter: dict | None) -> dict  # AND; caller can only narrow
 ```
 See SECURITY.md §5 for the reference implementation. This module is the single source of authorization and the focus of the `access-control-reviewer`.
