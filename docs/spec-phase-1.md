@@ -28,7 +28,7 @@ Build an end-to-end local pipeline: load three Gutenberg "products" → chunk �
 Hybrid/BM25 as core (only a poke experiment), reranking, Azure, generation, auth, a web API. See PLANNING §Open Questions.
 
 ### Build order (each step ≈ one atomic commit)
-1. corpus prep · 2. `config` + `ingest` · 3. `chunk` · 4. `embed` · 5. `store/chroma` · 6. index script · 7. `security` · 8. `retrieve` · 9. **leak demo** · 10. `eval` + cross-tenant test · 11. poke experiments.
+1. corpus prep · 2. `config` + `ingest` · 3. `chunk` · 4. `embed` · 5. `store/chroma` · 6. index script · 7. `security` · 8. `retrieve` **+ cross-tenant leak test** · 9. **leak demo** · 10. `eval` · 11. poke experiments.
 
 ---
 
@@ -200,7 +200,7 @@ Hand-author ~5–10 queries/product against the `root` user (full corpus). At ev
 `recall@k`, `hit-rate@k`, `MRR`, `nDCG@k` — mean over the golden set. This is the regression gate for chunk/embedding/retrieval changes.
 
 ### H.3 Cross-tenant leak test (mandatory · pytest)
-For each non-root user, fire queries that *should* surface other products, assert every returned `product_id ∈ entitlements[user]`. Plus: unknown user → empty; caller filter can narrow not widen. Lands the moment E + F exist.
+For each non-root user, fire queries that *should* surface other products, assert every returned `product_id ∈ entitlements[user]`. Plus: unknown user → **denied (`NoEntitlementsError`, no query issued)**; caller filter can narrow not widen. **Lands in step 8 with `retrieve.py`** — the moment E + F coexist (SECURITY.md §6); a green suite without it is false safety.
 
 ---
 
@@ -221,7 +221,7 @@ Run these as a **cost-tiered sweep**, not ad-hoc (ADR-004 §2; procedure in the 
 - [ ] Index builds into Chroma (cosine) with metadata on every chunk.
 - [ ] `retrieve()` applies the server-side filter inside the query and refuses to run unfiltered.
 - [ ] **Leak demo** shows un-filtered leak and filtered clean result, explained.
-- [ ] **Cross-tenant test green** — no unauthorized `product_id` ever returned; unknown user → empty.
+- [ ] **Cross-tenant test green** (lands step 8 with `retrieve.py`) — no unauthorized `product_id` ever returned; unknown user → denied (`NoEntitlementsError`).
 - [ ] Eval harness runs over the golden set and reports the 4 metrics.
 - [ ] At least the chunk-size and exact-vs-paraphrase experiments written up.
 
