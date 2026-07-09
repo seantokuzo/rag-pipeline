@@ -10,7 +10,7 @@
 |---|---|---|
 | `0.0.x` | Active development, expect breakage. **We are here.** | Patch-bump anything during scaffolding + Phase 1 build. |
 | `0.1.0` | First version trusted as a working teaching artifact. | Phase 1 end-to-end: leak demo reproducible + cross-tenant test green + eval harness runs. |
-| `0.x.y` | Feature waves. | Azure backend, hybrid search, reranking, the transcript "video" product. |
+| `0.x.y` | Feature waves. | Multi-format ingestion (Phase 1.5), Azure backend, hybrid search, reranking, the transcript "video" product. |
 | `1.0.0` | N/A for a learning lab. | — |
 
 ---
@@ -111,6 +111,29 @@ Everything else — ingest, chunk, the security invariant, eval — is identical
 11. poke experiments — vary chunk size; exact-term vs paraphrased queries (motivates hybrid); print similarity scores.
 **Acceptance:** leak demo reproducible and explained; cross-tenant test green; eval harness runs over a golden set; chunk-size + query-type experiments documented in `docs/history/`.
 
+### Phase 1.5 — Multi-format ingestion · status: queued
+**Goal:** prove Design Principle #5 — the pipeline doesn't care about source modality — by ingesting formats beyond `.txt` through a new **loader seam**, while `chunk → embed → store → retrieve` and the security invariant stay byte-for-byte the same. Every source becomes `text + metadata`; a chunk from a scanned PDF or a transcribed clip is `product_id`-stamped and entitlement-filtered identically to a Gutenberg chunk. Scope decided as **Option A** (see ADR-005).
+
+**Why here (after eval, before Azure):**
+- *After eval (step 10):* the harness lets us **measure** whether an extraction/serialization choice (table→sentence, OCR quality) actually helps retrieval — Principle #2, not faith.
+- *Before Azure:* each scrappy local loader has a managed Azure twin, so we learn the *concept* by hand-rolling it, then Phase 2 swaps in the real service. This phase is the on-ramp to Azure, not a detour.
+
+**The loader seam (the one new abstraction — ADR-005):** an `ingest/` package with a `Loader` Protocol (`load(path) -> SourceDoc`) + one concrete loader per format behind it, mirroring `store/`. Dispatch by file extension. The metadata schema grows from `{product_id, source}` to also carry `{page | sheet/row | timestamp}` provenance (the timestamp is the hook the transcript "video product" needs).
+
+**Build order (each ≈ one atomic commit), Option A scope:**
+1. **Refactor `ingest.py` → `ingest/` package** — extract the current `.txt` path behind the `Loader` Protocol (`text.py`), **no behavior change**; the leak test + eval stay green. (Proves the seam before adding formats.)
+2. **Tabular** (`tabular.py`) — CSV / `.xlsx` via `csv`/`openpyxl`; decide + document the row→text serialization (row-as-sentence with header context). Metadata: `sheet`, `row`.
+3. **PDF, text layer** (`pdf.py`) — `pypdf`/`pymupdf`; page-level metadata; layout gotchas (columns, headers/footers, tables) written up in `docs/history/`.
+4. **PDF, scanned** — Tesseract OCR fork (detect a missing text layer → OCR); OCR quality measured against the eval harness.
+5. **Audio spike** — `faster-whisper` (`tiny`/`base`) on a ~60s clip → transcript + segment timestamps; small, to *feel* ASR + timestamped chunks, not a production path.
+6. **Video spike** — `ffmpeg` extract the audio track → reuse the audio loader; note the visual tier (keyframes / slide-OCR) as advanced/deferred.
+
+**Acceptance:** a mixed-format product ingests end-to-end; the **cross-tenant leak test passes over non-text sources** (the invariant is modality-blind); a short write-up per format in `docs/history/`; extraction/serialization choices scored on the eval harness where it applies. Full-scale audio/video ingestion is explicitly **deferred to Phase 2** (Azure Speech / Video Indexer), where it's production-real.
+
+**Intel-Mac caveat (ADR-003 redux):** `pymupdf`, `ctranslate2`/`faster-whisper`, and Tesseract bindings all need an x86_64-macOS wheel-availability probe *before* we pin versions — the same wheel-wall that produced ADR-003. Probe first (rag-researcher / a throwaway `uv` env), then pin per the caps.
+
+**Azure twins (the Phase-2 bridge):** pypdf + Tesseract → **Azure Document Intelligence** · faster-whisper → **Azure AI Speech** · ffmpeg + whisper → **Azure Video Indexer**.
+
 ### Phase 2 — Graduate to Azure · status: queued
 **Goal:** mirror the company's infra — swap the vector DB and embeddings to Azure, keep the pipeline logic and the invariant.
 **Deliverables:**
@@ -128,9 +151,9 @@ Everything else — ingest, chunk, the security invariant, eval — is identical
 
 1. **Security is the lesson.** The entitlement filter is the centerpiece; the pipeline exists to demonstrate and explain it.
 2. **Start simple, measure, then add complexity.** Recursive-512 + dense retrieval first. Let the eval harness justify hybrid, reranking, or fancier chunking — don't add them on faith.
-3. **Swap components, keep logic.** The only abstraction we build is the vector-store seam. Phase 1→2 changes adapters, not the pipeline or the invariant.
+3. **Swap components, keep logic.** We build **two** deliberate abstraction seams, each justified by 3+ real implementations (never speculation): the **vector-store seam** (Phase 1→2 swaps Chroma↔Azure) and the **ingest loader seam** (Phase 1.5 — text/tabular/PDF/audio loaders behind one contract; ADR-005). Everything between them — chunk, embed, retrieve, and the security invariant — stays put.
 4. **Parity is sacred.** Query and index embeddings must match in model, normalization, and prompt convention.
-5. **Everything normalizes to text.** Products are folders of text; later a transcript drops in as a "video" product to prove the pipeline doesn't care about source modality.
+5. **Everything normalizes to text.** Products are folders of text; later a transcript drops in as a "video" product to prove the pipeline doesn't care about source modality. **Phase 1.5 makes this concrete** — Excel/PDF/audio/video all normalize to `text + metadata` through the loader seam, and the cross-tenant leak test must pass unchanged over them.
 6. **Explain as we go.** Decisions → `docs/decisions/` (ADRs). Learnings/surprises → `docs/history/`.
 
 ---
@@ -151,3 +174,4 @@ See `CLAUDE.md` → Anti-Patterns. The cardinal one: **the entitlement filter is
 2. **Hybrid search in Phase 1?** *Recommendation:* a minimal local BM25 + RRF experiment to *feel* exact-term vs paraphrase, but treat Azure as where hybrid is "real."
 3. **LLM synthesis (generation)?** Out of scope for now — retrieval returns chunks. A generation step is a possible later wave.
 4. **Golden eval set size?** Hand-author a small set per product (start ~5–10 queries/product with known relevant chunks); grow as needed.
+5. **Ingest loader seam — exact shape (Phase 1.5)?** A `Loader` Protocol (`load(path) -> SourceDoc`) dispatched by extension, mirroring `store/`; metadata grows to carry `page`/`sheet`/`timestamp`. *Open until build time:* single-vs-iterable return, typed provenance fields vs a flexible `dict`, the row→sentence table serialization, and per-format library pins (gated on an x86_64-macOS wheel probe — `pymupdf`/`faster-whisper`/Tesseract, the ADR-003 wheel-wall). See ADR-005 (Proposed).
