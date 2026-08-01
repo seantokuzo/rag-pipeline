@@ -90,12 +90,12 @@ Everything else — ingest, chunk, the security invariant, eval — is identical
 
 ## Roadmap
 
-### Phase 0 — Scaffolding (Session 1) · status: in-progress
+### Phase 0 — Scaffolding (Session 1) · status: done
 **Goal:** a clean, RAG-adapted Claude Code workspace + planning/spec docs so later sessions build cleanly.
 **Deliverables:** CLAUDE.md; this doc; STATE.md; SECURITY.md; SESSION-GUIDE.md; spec-phase-1.md; ADR + history systems; `.claude/` (settings, hooks, rules, agents, skills); Python skeleton; `products/` corpus folders.
 **Acceptance:** docs coherent and cross-linked; tooling wired; next session can start Phase 1 from STATE.md alone.
 
-### Phase 1 — Local, zero-cost pipeline · status: queued
+### Phase 1 — Local, zero-cost pipeline · status: done
 **Goal:** end-to-end ingest→embed→Chroma→retrieve with server-side entitlement filtering, and a reproducible, explainable leak demo.
 **Build order (each step ≈ one atomic commit):**
 1. `corpus` — download 3 products' Gutenberg texts into `products/` (distinct vocabularies).
@@ -109,9 +109,10 @@ Everything else — ingest, chunk, the security invariant, eval — is identical
 9. ★ **leak experiment** (`demo.py`) — run a query (a) with NO filter (watch un-licensed products leak in) and (b) WITH the server-side filter (clean). The payoff lesson.
 10. `eval` harness — golden queries → recall@k / hit-rate / MRR / nDCG; **cross-tenant leak test** in `pytest` asserting zero unauthorized `product_id` ever returned.
 11. poke experiments — vary chunk size; exact-term vs paraphrased queries (motivates hybrid); print similarity scores.
-**Acceptance:** leak demo reproducible and explained; cross-tenant test green; eval harness runs over a golden set; chunk-size + query-type experiments documented in `docs/history/`.
+**Acceptance:** leak demo reproducible and explained; cross-tenant test green; eval harness runs over a golden set; chunk-size + query-type experiments documented in `docs/history/`. — **ALL MET.**
+**Result (step 11, `docs/history/EXP-chunk-size-sweep.md`):** the sweep **disproved** the "smaller chunks win" hypothesis — at k=5 overall hit-rate is **512 (0.333) > 256 (0.286) > 1024 (0.238)**, so **512 stays the default, now earned with data**. Exact and paraphrase queries want **opposite** sizes (exact best @512 = 0.625; paraphrase best @1024 = 0.538 @k10), and 1024 breaks against bge-small's **512-token max sequence** (433/444 chunks tail-truncated → exact recall collapses to 0.125). Dense cosine scores are **not thresholdable** (a wrong top-1 outscores relevant hits) → motivates hybrid/BM25 + a cross-encoder reranker in Phase 2.
 
-### Phase 1.5 — Multi-format ingestion · status: queued
+### Phase 1.5 — Multi-format ingestion · status: queued ◀ **NEXT UP**
 **Goal:** prove Design Principle #5 — the pipeline doesn't care about source modality — by ingesting formats beyond `.txt` through a new **loader seam**, while `chunk → embed → store → retrieve` and the security invariant stay byte-for-byte the same. Every source becomes `text + metadata`; a chunk from a scanned PDF or a transcribed clip is `product_id`-stamped and entitlement-filtered identically to a Gutenberg chunk. Scope decided as **Option A** (see ADR-005).
 
 **Why here (after eval, before Azure):**

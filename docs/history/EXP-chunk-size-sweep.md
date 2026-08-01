@@ -2,7 +2,7 @@
 
 **Status:** done
 **Started / Completed:** 2026-07-27 / 2026-08-01
-**Commits/PRs (if any):** Phase 1, step 11 (poke experiments) — committed on `phase-1/env-and-corpus`
+**Commits/PRs (if any):** `0656d06` — Phase 1, step 11 (poke experiments), on `phase-1/env-and-corpus`
 
 ## What shipped / what was tested
 
