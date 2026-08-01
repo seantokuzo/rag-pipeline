@@ -144,6 +144,9 @@ class QueryEval:
 
     q: str
     product_id: str
+    tier: (
+        str  # "exact" | "paraphrase" — the query style, for the per-tier split (ADR-004 / step 11)
+    )
     num_relevant: int  # |R| — how many live chunks contained the quote
     first_rank: int | None  # rank of the first relevant hit (None = missed within top-k)
     hit_rate: float
@@ -153,16 +156,48 @@ class QueryEval:
 
 
 @dataclass(frozen=True, slots=True)
+class TierMeans:
+    """The four means over one slice of the golden set (all of it, or one tier)."""
+
+    label: str  # "all", "exact", "paraphrase", …
+    count: int  # how many queries this slice covers
+    hit_rate: float
+    recall: float
+    mrr: float
+    ndcg: float
+
+
+def aggregate(label: str, rows: list[QueryEval]) -> TierMeans:
+    """Mean the four metrics over `rows` (a whole run or one tier's slice).
+
+    Pure over already-scored `QueryEval`s so it is unit-testable without an index. An
+    empty slice yields 0.0 means (via `_mean`) — a tier absent from the golden set reads
+    as zero, not a crash.
+    """
+    return TierMeans(
+        label=label,
+        count=len(rows),
+        hit_rate=_mean([r.hit_rate for r in rows]),
+        recall=_mean([r.recall for r in rows]),
+        mrr=_mean([r.mrr for r in rows]),
+        ndcg=_mean([r.ndcg for r in rows]),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class EvalReport:
-    """The whole run: per-query rows + the four means that are the regression gate."""
+    """The whole run: per-query rows + the overall means (the regression gate) + per-tier.
+
+    `overall` is the headline number to track across sweeps; `by_tier` splits it by query
+    style (exact vs paraphrase) — the step-11 experiment showing where dense retrieval
+    handles paraphrase and where exact-term queries would motivate hybrid/BM25 (ADR-004).
+    """
 
     k: int
     chunk_size: int
     per_query: list[QueryEval]
-    mean_hit_rate: float
-    mean_recall: float
-    mean_mrr: float
-    mean_ndcg: float
+    overall: TierMeans
+    by_tier: dict[str, TierMeans]
 
 
 # ── The harness ──────────────────────────────────────────────────────────────────
@@ -216,6 +251,7 @@ def run_eval(
             QueryEval(
                 q=row["q"],
                 product_id=row["product_id"],
+                tier=row.get("tier", "untagged"),
                 num_relevant=len(relevant),
                 first_rank=first_relevant_rank(retrieved, relevant, k),
                 hit_rate=hit_rate_at_k(retrieved, relevant, k),
@@ -225,14 +261,13 @@ def run_eval(
             )
         )
 
+    tiers = sorted({r.tier for r in per_query})
     return EvalReport(
         k=k,
         chunk_size=chunk_size,
         per_query=per_query,
-        mean_hit_rate=_mean([r.hit_rate for r in per_query]),
-        mean_recall=_mean([r.recall for r in per_query]),
-        mean_mrr=_mean([r.mrr for r in per_query]),
-        mean_ndcg=_mean([r.ndcg for r in per_query]),
+        overall=aggregate("all", per_query),
+        by_tier={t: aggregate(t, [r for r in per_query if r.tier == t]) for t in tiers},
     )
 
 
@@ -241,32 +276,42 @@ def run_eval(
 WIDTH = 96
 
 
+def _fmt_means(m: TierMeans, k: int) -> str:
+    """One aligned means line — reused for the overall row and each per-tier row."""
+    return (
+        f"hit-rate@{k}={m.hit_rate:.3f}   recall@{k}={m.recall:.3f}   "
+        f"MRR={m.mrr:.3f}   nDCG@{k}={m.ndcg:.3f}"
+    )
+
+
 def _format_report(report: EvalReport) -> str:
-    """Render a per-query table + the mean summary as a printable string."""
+    """Render a per-query table + the overall means + the exact/paraphrase split."""
     lines = [
         "=" * WIDTH,
         f"  RETRIEVAL EVAL   k={report.k}   chunk_size={report.chunk_size}   "
         f"golden queries={len(report.per_query)}",
         "  quality only (user=root, full corpus) — safety is the separate cross-tenant test",
         "=" * WIDTH,
-        "  rank   hit  recall    mrr   ndcg  product      query",  # aligned to the data rows below
+        "  rank   hit  recall    mrr   ndcg  tier        product      query",
         "  " + "-" * (WIDTH - 4),
     ]
     for r in report.per_query:
         rank = str(r.first_rank) if r.first_rank is not None else "—"
         miss = "" if r.first_rank is not None else "  ← MISS"
-        q = r.q if len(r.q) <= 40 else r.q[:39] + "…"
+        q = r.q if len(r.q) <= 34 else r.q[:33] + "…"
         lines.append(
             f"  {rank:>4}  {r.hit_rate:>4.0f}  {r.recall:>6.2f}  {r.mrr:>5.2f}  "
-            f"{r.ndcg:>5.2f}  {r.product_id:<11}  {q}{miss}"
+            f"{r.ndcg:>5.2f}  {r.tier:<10}  {r.product_id:<11}  {q}{miss}"
         )
     lines += [
         "  " + "-" * (WIDTH - 4),
-        f"  MEAN over {len(report.per_query)} queries:   "
-        f"hit-rate@{report.k}={report.mean_hit_rate:.3f}   "
-        f"recall@{report.k}={report.mean_recall:.3f}   "
-        f"MRR={report.mean_mrr:.3f}   "
-        f"nDCG@{report.k}={report.mean_ndcg:.3f}",
+        f"  MEAN over all {report.overall.count} queries:   {_fmt_means(report.overall, report.k)}",
+        "  by query tier (exact = lexical overlap w/ the quote · paraphrase = NL question):",
+    ]
+    for tier in sorted(report.by_tier):
+        m = report.by_tier[tier]
+        lines.append(f"    {m.label:<11} (n={m.count:>2}):   {_fmt_means(m, report.k)}")
+    lines += [
         "=" * WIDTH,
         "  These numbers mean little in absolute terms — compare the DELTA across runs.",
         "  Re-run after any chunk/embed/retrieval change; a drop = investigate before commit.",

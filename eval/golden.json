@@ -4,125 +4,167 @@
     "user": "root",
     "product_id": "detective",
     "source": "adventures-of-sherlock-holmes",
-    "relevant_quote": "You see, but you do not observe"
+    "relevant_quote": "You see, but you do not observe",
+    "tier": "exact"
   },
   {
     "q": "how does Watson describe the quality of Holmes's mind?",
     "user": "root",
     "product_id": "detective",
     "source": "adventures-of-sherlock-holmes",
-    "relevant_quote": "the most perfect reasoning and observing machine"
+    "relevant_quote": "the most perfect reasoning and observing machine",
+    "tier": "paraphrase"
   },
   {
     "q": "what does Holmes value about Watson as a companion?",
     "user": "root",
     "product_id": "detective",
     "source": "adventures-of-sherlock-holmes",
-    "relevant_quote": "You have a grand gift of silence, Watson"
+    "relevant_quote": "You have a grand gift of silence, Watson",
+    "tier": "paraphrase"
   },
   {
     "q": "how did the beggar's disfigured face change when the disguise came off?",
     "user": "root",
     "product_id": "detective",
     "source": "adventures-of-sherlock-holmes",
-    "relevant_quote": "the twisted lip which had given the repulsive sneer to the face"
+    "relevant_quote": "the twisted lip which had given the repulsive sneer to the face",
+    "tier": "paraphrase"
   },
   {
     "q": "You know my methods",
     "user": "root",
     "product_id": "detective",
     "source": "adventures-of-sherlock-holmes",
-    "relevant_quote": "You know my methods"
+    "relevant_quote": "You know my methods",
+    "tier": "exact"
   },
   {
     "q": "how does Sherlock Holmes describe his profession?",
     "user": "root",
     "product_id": "detective",
     "source": "adventures-of-sherlock-holmes",
-    "relevant_quote": "It is my business to know what other"
+    "relevant_quote": "It is my business to know what other",
+    "tier": "paraphrase"
+  },
+  {
+    "q": "It is a capital mistake to theorise before one has data",
+    "user": "root",
+    "product_id": "detective",
+    "source": "adventures-of-sherlock-holmes",
+    "relevant_quote": "It is a capital mistake to theorise before one has data",
+    "tier": "exact"
   },
   {
     "q": "To be, or not to be, that is the question",
     "user": "root",
     "product_id": "shakespeare",
     "source": "hamlet",
-    "relevant_quote": "To be, or not to be, that is the question"
+    "relevant_quote": "To be, or not to be, that is the question",
+    "tier": "exact"
   },
   {
     "q": "what advice does Polonius give about borrowing and lending?",
     "user": "root",
     "product_id": "shakespeare",
     "source": "hamlet",
-    "relevant_quote": "Neither a borrower nor a lender be"
+    "relevant_quote": "Neither a borrower nor a lender be",
+    "tier": "paraphrase"
   },
   {
     "q": "there are more things in heaven and earth than we can dream of",
     "user": "root",
     "product_id": "shakespeare",
     "source": "hamlet",
-    "relevant_quote": "There are more things in heaven and earth, Horatio"
+    "relevant_quote": "There are more things in heaven and earth, Horatio",
+    "tier": "paraphrase"
   },
   {
     "q": "who observes that there is method in the madness?",
     "user": "root",
     "product_id": "shakespeare",
     "source": "hamlet",
-    "relevant_quote": "Though this be madness, yet there is method"
+    "relevant_quote": "Though this be madness, yet there is method",
+    "tier": "paraphrase"
   },
   {
     "q": "what does Polonius say about brevity and wit?",
     "user": "root",
     "product_id": "shakespeare",
     "source": "hamlet",
-    "relevant_quote": "brevity is the soul of wit"
+    "relevant_quote": "brevity is the soul of wit",
+    "tier": "paraphrase"
   },
   {
     "q": "the advice to be true to oneself above all",
     "user": "root",
     "product_id": "shakespeare",
     "source": "hamlet",
-    "relevant_quote": "This above all: to thine own self be true"
+    "relevant_quote": "This above all: to thine own self be true",
+    "tier": "paraphrase"
+  },
+  {
+    "q": "Something is rotten in the state of Denmark",
+    "user": "root",
+    "product_id": "shakespeare",
+    "source": "hamlet",
+    "relevant_quote": "Something is rotten in the state of Denmark",
+    "tier": "exact"
   },
   {
     "q": "what does Darwin mean by the struggle for existence?",
     "user": "root",
     "product_id": "science",
     "source": "on-the-origin-of-species",
-    "relevant_quote": "there is a frequently recurring struggle for existence"
+    "relevant_quote": "there is a frequently recurring struggle for existence",
+    "tier": "paraphrase"
   },
   {
     "q": "endless forms most beautiful",
     "user": "root",
     "product_id": "science",
     "source": "on-the-origin-of-species",
-    "relevant_quote": "endless forms most beautiful and most wonderful"
+    "relevant_quote": "endless forms most beautiful and most wonderful",
+    "tier": "exact"
   },
   {
     "q": "how does Darwin use the metaphor of a tree to explain descent?",
     "user": "root",
     "product_id": "science",
     "source": "on-the-origin-of-species",
-    "relevant_quote": "it has been with the great Tree of Life"
+    "relevant_quote": "it has been with the great Tree of Life",
+    "tier": "paraphrase"
   },
   {
     "q": "the geometrical ratio of increase in populations",
     "user": "root",
     "product_id": "science",
     "source": "on-the-origin-of-species",
-    "relevant_quote": "the geometrical ratio of increase"
+    "relevant_quote": "the geometrical ratio of increase",
+    "tier": "exact"
   },
   {
     "q": "why does Darwin say the fossil record is incomplete?",
     "user": "root",
     "product_id": "science",
     "source": "on-the-origin-of-species",
-    "relevant_quote": "the extreme imperfection of the geological record"
+    "relevant_quote": "the extreme imperfection of the geological record",
+    "tier": "paraphrase"
   },
   {
     "q": "what single law does Darwin say leads to the advancement of all organic beings?",
     "user": "root",
     "product_id": "science",
     "source": "on-the-origin-of-species",
-    "relevant_quote": "one general law, leading to the advancement of all organic beings"
+    "relevant_quote": "one general law, leading to the advancement of all organic beings",
+    "tier": "paraphrase"
+  },
+  {
+    "q": "from the war of nature, from famine and death",
+    "user": "root",
+    "product_id": "science",
+    "source": "on-the-origin-of-species",
+    "relevant_quote": "from the war of nature, from famine and death",
+    "tier": "exact"
   }
 ]

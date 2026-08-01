@@ -182,6 +182,21 @@ Each metric is computed per query, then **averaged across the golden set**. Thos
 
 > Not on the list: **precision@k**. With `|R| = 1` and `k = 5`, a *perfect* system scores 0.2 — the metric mostly measures `k`, not quality. It earns its place when queries have many relevant docs.
 
+### Slicing the mean: the `exact` / `paraphrase` tiers
+
+A single mean over the whole set is a **blunt instrument** — it can sit flat while two halves of your corpus move in opposite directions and cancel out. So every golden row carries a **`tier`** tag describing the *style* of the question:
+
+| tier | what it means | example |
+|---|---|---|
+| `exact` | the query shares verbatim lexical overlap with the quote | *"You see, but you do not observe"* |
+| `paraphrase` | a natural-language question with little or no shared wording | *"what advice does Polonius give about borrowing money?"* |
+
+`run_eval` groups the per-query rows by tier and reports `EvalReport.overall` **plus** `EvalReport.by_tier` — same four metrics, computed by one pure, unit-tested `aggregate()` (an empty tier yields zeros, not a crash). Rows with no `tier` key fall into `"untagged"`.
+
+Why bother: **this split is where the physics shows up.** In the step-11 sweep the overall mean said "512 is best, mildly." The tier split said something far sharper — **`exact` and `paraphrase` queries want opposite chunk sizes** (exact peaked at 512, paraphrase at 1024), a conclusion the aggregate number completely hid. It also maps directly onto a design decision: `exact` misses are what a **lexical/BM25 index** fixes (hybrid retrieval), `paraphrase` misses are what a **better embedding model or bigger context** fixes. Different failures, different levers — you can't tell them apart from one number.
+
+> The general lesson, well beyond this project: **report the mean, then immediately break it apart along whatever dimension you expect to behave differently.** The aggregate is the headline; the slice is the finding.
+
 ## Part 4 — Using it: the gate
 
 The numbers are close to meaningless in absolute terms. "nDCG 0.72" — good? No idea. There's no external baseline, our corpus is 990 chunks of three books, and the golden set is one person's judgment.
@@ -195,6 +210,10 @@ They're **entirely** meaningful as a **delta**:
 A drop = investigate *before* committing. A rise = you learned something real. This is the discipline that makes ADR-004's cost-tiered sweeps (spec Part I) possible at all: `chunk_size ∈ {256, 512, 1024} × k ∈ {3, 5, 10}` is only a meaningful experiment because the answer key survives every cell of that matrix and the metric math never moves.
 
 **One variable per comparison**, and hold `k` fixed when comparing recall. Per-query output matters as much as the means: a mean that slips from 0.78 to 0.71 tells you *something* broke; the per-query column tells you *which question* broke, which is the only actionable form of the news.
+
+**⚠️ The answer key is also a variable.** Step 11 added three rows to the golden set and the headline hit-rate "improved" 0.278 → 0.333 — **entirely from the new rows, before a single setting changed.** A baseline is only comparable against runs scored on the *same* golden set. When you grow the answer key, you've reset the baseline: re-score the incumbent config and record the new number. (Current baseline: **@512 / k=5 over the 21-row set — overall hit-rate 0.333 · MRR 0.224 · nDCG 0.251; exact 0.625 · paraphrase 0.154.**)
+
+**And the harness has a footgun worth knowing.** `run_eval` re-chunks the corpus from source to resolve quotes → chunk ids, so its `chunk_size`/`chunk_overlap` **must match the size the index it's querying was built at.** Mismatch them and the re-chunked ids don't line up with the indexed ids — *every* query scores ~0. It looks exactly like catastrophically broken retrieval; it's a config typo. Build at 256 → score with `chunk_size=256`. Never mix.
 
 ## Quality is not safety
 

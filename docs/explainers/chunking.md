@@ -85,6 +85,11 @@ Chunking is the highest-leverage RAG knob — and it's **empirical**. You don't 
 
 **Rules of thumb (2026):** factoid/lookup corpora like small chunks (64–256); prose like ours (Holmes, Darwin, Hamlet) likes 512–1024 and often *peaks ~1024*. Reach for **size** first, **overlap** only if a *specific* failing query turns out to be an answer cut in half, and **strategy** upgrades last (semantic ≈ 14× slower for modest gains; contextual retrieval cuts failures ~35% but costs an LLM pass — earn them with data).
 
+> 📊 **We measured it (step 11) — and the rules of thumb only half held.** Sweeping `size ∈ {256, 512, 1024} × k ∈ {3, 5, 10}` on our own corpus ([`EXP-chunk-size-sweep.md`](../history/EXP-chunk-size-sweep.md)):
+> - **512 won overall** (hit@5: **512 = 0.333** > 256 = 0.286 > 1024 = 0.238). The going-in hypothesis — *smaller chunks dilute less, so recall climbs* — was **wrong**. Size is a **precision/recall trade, not a monotonic dial**: shrinking the chunk also shrinks every *competitor's* signal and multiplies the number of confusable neighbors, so the right chunk doesn't automatically rise.
+> - **Query type decides the best size, and the two types disagree.** *Exact/pinpoint* queries peaked at 512 (0.625); *paraphrase/topical* queries peaked at **1024** (0.538 @k=10). Small chunks = pinpoint precision; large chunks = topical recall. There is no single best size — only a best size **per query type**, which is the honest argument for hybrid retrieval or multi-resolution indexing later.
+> - **The "peaks ~1024" advice is a trap with a 512-token model.** At `chunk_size=1024`, **433/444 chunks exceeded bge-small's 512-token max sequence** and were tail-truncated *at embed time*. The chunk's **text** is stored whole (so a golden quote still *resolves*) but its **vector** only encodes the first ~512 tokens → **resolution ≠ retrieval**, and exact hit-rate collapsed to 0.125. **Never set `chunk_size` above the embedding model's max sequence** — that advice assumes a model with a bigger window than ours.
+
 **The method — the A/B loop** (this is the whole game):
 
 1. Change **one** knob; hold the rest fixed.
@@ -94,7 +99,7 @@ Chunking is the highest-leverage RAG knob — and it's **empirical**. You don't 
 
 *(That's the unit. The **cost-tiered** version — sweep cheap query-time knobs against one fixed index first, sample before full re-embeds — lives in the [`chunking-lab` skill](../../.agents/skills/chunking-lab/SKILL.md) and [ADR-004](../decisions/ADR-004-eval-methodology.md) §2. Re-embedding is the expensive part; don't pay it for a knob that didn't change the vectors.)*
 
-> ⚠️ **You can't tune blind — and the measuring instrument isn't built yet.** The eval harness lands at **step 10**. Until then we hold the locked defaults (recursive · 512 · 0) and don't twiddle on a hunch. *Measure, then tune.*
+> ✅ **The instrument is built, the loop has been run once.** The eval harness landed at step 10 and step 11 ran this exact A/B over the size knob — result above. **512 · overlap 0 · recursive stays the default, now *earned* rather than assumed.** **Overlap has still never been swept** (held at 0 through all of Phase 1); it's the natural next experiment if a specific answer turns out to be split across a boundary. *Measure, then tune* — and write down the number that made you keep the winner.
 
 **The specific "tiny trailing chunk" case** (our `min = 6` tokens): almost certainly cosmetic — a 6-token vector simply won't match much, so it rarely surfaces. *If* the eval ever shows it dragging precision, the fix isn't a global knob but a targeted **min-chunk merge**: fold any sub-threshold tail back into its predecessor. We'd add that only when the data asks — premature, it's just complexity.
 

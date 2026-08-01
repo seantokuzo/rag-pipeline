@@ -57,6 +57,12 @@ class Hit:
 
 `score` is **cosine similarity**, derived as `1 - cosine_distance` in the store, so **higher is always better** (1.0 = identical direction). We expose similarity rather than raw distance so "bigger = more relevant" holds everywhere downstream and reads in the same units as the embedding step. Low or even negative scores are *informative*, not a bug: a detective-only user firing a science query gets back her best-matching *detective* chunks, and their low scores honestly say "these aren't a great match — but they're the best you're **entitled** to." (Score is also the raw material for a later relevance threshold or reranker — [poke experiments](../spec-phase-1.md).)
 
+> 🚫 **Don't build a relevance threshold on this score — we measured it, and it doesn't separate.** Step 11 dumped the cosine of every top-1 hit next to every *relevant* hit across the golden set ([`EXP-chunk-size-sweep.md`](../history/EXP-chunk-size-sweep.md)). At 512 the mean score of **relevant** hits was **0.646** while the mean of top-1 hits that were **wrong** was **0.670** — the wrong answers scored *higher*. At 256 relevant edged ahead (0.712 vs 0.674) but the two ranges overlapped completely. **No global cutoff cleanly divides relevant from irrelevant.**
+>
+> The reason is structural, not a quirk of our corpus: a cosine score says *"these two vectors point in a similar direction"* — it's **similarity, not calibrated relevance**, and its scale drifts with query length, chunk length, and topic. "Everything above 0.75 is a good hit" is a tempting one-liner that quietly drops real answers and keeps confident wrong ones.
+>
+> The actual fix is a **cross-encoder reranker**: instead of comparing two independently-computed vectors, it feeds the query and the chunk through a model *together* and scores the pair jointly. Far more accurate, far too slow to run over the whole corpus — which is exactly why it goes **after** retrieval, re-ranking a top-k of ~20 down to the best 5. That's the Phase-2 candidate, and this measurement is why we want it.
+
 ## top-k, and why pre-filter changes what k means
 
 `k` is how many hits you want back (`config.K = 5`). The subtle part: because the filter is a **pre-filter** (applied *inside* the search), `k` counts **entitled** rows. Alice asking for `k=5` gets *the 5 best chunks she's allowed to see*.

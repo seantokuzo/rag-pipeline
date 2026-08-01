@@ -12,7 +12,9 @@ from math import log2
 import pytest
 
 from rag_exp.eval import (
+    QueryEval,
     _norm,
+    aggregate,
     first_relevant_rank,
     hit_rate_at_k,
     ndcg_at_k,
@@ -116,3 +118,34 @@ def test_resolve_zero_match_is_hard_error():
     normed = [("detective:doc:0", _norm("nothing to see here"))]
     with pytest.raises(ValueError, match="0 chunks"):
         resolve_relevant("this quote is not present", normed)
+
+
+# ── Per-tier aggregation (step 11 exact-vs-paraphrase split) ──────────────────────
+def _qe(tier: str, hit: float, recall: float, mrr: float, ndcg: float) -> QueryEval:
+    """A minimal already-scored QueryEval — only the fields aggregate() averages matter."""
+    return QueryEval(
+        q="q",
+        product_id="p",
+        tier=tier,
+        num_relevant=1,
+        first_rank=None,
+        hit_rate=hit,
+        recall=recall,
+        mrr=mrr,
+        ndcg=ndcg,
+    )
+
+
+def test_aggregate_means_and_count():
+    rows = [_qe("exact", 1, 1, 1, 1), _qe("exact", 0, 0, 0, 0)]
+    m = aggregate("exact", rows)
+    assert m.label == "exact"
+    assert m.count == 2
+    assert (m.hit_rate, m.recall, m.mrr, m.ndcg) == (0.5, 0.5, 0.5, 0.5)
+
+
+def test_aggregate_empty_slice_is_zero_not_crash():
+    # A tier absent from the golden set must read as zero, never divide-by-zero.
+    m = aggregate("paraphrase", [])
+    assert m.count == 0
+    assert (m.hit_rate, m.recall, m.mrr, m.ndcg) == (0.0, 0.0, 0.0, 0.0)
