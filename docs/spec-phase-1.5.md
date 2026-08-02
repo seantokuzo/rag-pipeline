@@ -75,8 +75,8 @@ class Loader(Protocol):
 This never fired in Phase 1 (one file → one doc → `source` = the filename stem, unique by filesystem). The moment a loader yields multiple parts it is live. Mitigation, binding on every loader:
 
 - A multi-part loader **must** emit a unique `source` per part — a fully-qualified locator, e.g. `sales-q1#sheet1#row12`, `report#p07`, `interview#t0031`.
-- `load_products()` **must** assert global `(product_id, source)` uniqueness across the whole run and raise `ValueError` naming the duplicate. Cheap (one `set`), and it converts a silent data-loss bug into a loud one.
-- A test pins this: a fake two-part loader emitting a duplicate `source` must raise.
+- `load_products()` **must** assert that the **id prefix `f"{product_id}:{source}"`** is globally unique across the run, and raise `ValueError` naming the duplicate. Key on the *concatenation*, not a `(product_id, source)` tuple — distinct tuples can still concatenate to the same id (`("a", "x:y")` and `("a:x", "y")` both yield `a:x:y:0`), so only the prefix key is injective with the id scheme.
+- Tests pin this: duplicate `source` within one file, across two files in one product, and a cross-product prefix collision must each raise; the same `source` under *different* products must be legal.
 
 ### A.4 Provenance metadata — `[open, resolve at step 2]`
 ADR-005 left the shape open: **typed optional fields** on `RawDoc`/`Chunk` vs a **flexible `dict`**. Decide at step 2 (tabular — the first real need), not now. Constraint to carry in: **Chroma metadata values must be scalars** (`str`/`int`/`float`/`bool`), so a nested dict has to be flattened or serialized at the store boundary either way.
