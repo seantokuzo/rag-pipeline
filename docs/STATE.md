@@ -20,7 +20,17 @@
 
 **▶ PHASE 1.5 IS IN PROGRESS — spec written, step 1 of 6 done.** **`docs/spec-phase-1.5.md` is now the binding build spec** (Parts A–C binding; **Parts D–F deliberately thin/`[probe-gated]`** — their library pins wait on x86_64-macOS wheel probes). ADR-005 is still `Proposed`; flip it to `Accepted` at phase end. Build order: ~~1) refactor `ingest.py` → `ingest/`~~ ✅ (`80d52a9`) · **2) tabular ← START HERE** · 3) PDF text layer · 4) PDF scanned/OCR · 5) audio spike · 6) video spike.
 
-**🚦 ONE HUMAN DECISION IS DUE BEFORE STEP 2 — spec Part G #1, the corpus strategy.** Where do the new-format files live? Chunk ids are per-`source`, so existing ids are safe either way — **but the collection is pooled, so new rows compete in every query and the `0.333` baseline will move for reasons unrelated to extraction quality.** Options: **(a) a new product folder** (`products/finance/`) — baseline stays comparable, cleanest science; **(b) into the existing three** — a genuinely mixed-format product, more realistic, but re-baseline first and say so. Don't start step 2 without settling this.
+**✅ CORPUS RESOLVED (spec Part G #1) — new folders, files already committed (`fbeb6e5`) and currently INERT.** Two new products, all files **public domain**, provenance + license in each folder's README, frozen like the Phase-1 corpus:
+- **`products/gov-data/`** — the **mixed-format** product Part B's acceptance gate needs: `nasa-global-temperature.csv` (NASA GISTEMP v4, 149 lines) · `us-population-by-state.xlsx` (Census NST-EST2023-POP, 68×6) · `nist-cloud-computing-definition.pdf` (NIST SP 800-145, 7pp, **verified real text layer**).
+- **`products/media/`** — `hamlet-act1-librivox.mp3` (LibriVox, PD Mark 1.0, **~62s** — a byte-range prefix of a 64kbps CBR file is a clean time prefix, no `ffmpeg` needed to trim).
+
+**They are inert until their loaders land** — no `LOADERS` entry for `.csv`/`.xlsx`/`.pdf`/`.mp3`, so they're skipped-and-counted. Verified: **990 chunks, id set still identical to the live `./.chroma`, suite 29 GREEN**. ⚠️ **The `0.333` baseline moves the moment a loader registers** (new rows compete in every query) — re-baseline and record the new number in the same commit as each loader, and never compare across that line.
+
+**⚠️ `security.py`'s `ENTITLEMENTS` map must grow** to cover `gov-data` + `media` (and users entitled to them) or the non-text leak test has nothing to prove. Spec Part B now carries an explicit carve-out: the **map is data, the filter logic is frozen**.
+
+**🎁 Free ground truth for the extraction steps** — step 5's clip is *Hamlet* and `products/shakespeare/hamlet.txt` is the verbatim Gutenberg text, so **ASR error is measurable against it** with no hand-transcription. Same trick for step 4: **generate** the scanned PDF by rasterizing the NIST one (archive.org scans mostly ship *with* an OCR layer — the wrong test — and the one text-layer-free NASA report found was 104 MB), which makes the text-layer version the ground truth.
+
+**🔬 Wheel probes done (ADR-003 redux), in throwaway `uv run --no-project --with …` envs:** **`openpyxl` ✅ and `pypdf` ✅ install clean on x86_64-macOS** — **steps 2–3 are de-risked, pin them normally**. **Still unprobed: `pymupdf`, Tesseract bindings, `ctranslate2`/`faster-whisper`** (the last is the likeliest wall). **`ffmpeg` is NOT installed on this box** — needed for step 6.
 
 **What step 1 established (the contract every later loader inherits):**
 - **`Loader.load(path) -> Iterable[RawDoc]`.** Multi-part is allowed; **granularity is each loader's own documented call** (per-page vs per-file for a prose PDF is a *measurable* question, not an architectural one — decide it on the eval harness).
