@@ -87,7 +87,9 @@ ADR-005 left the shape open: **typed optional fields** on `RawDoc`/`Chunk` vs a 
 
 | Frozen | Why |
 |---|---|
-| `chunk.py`, `embed.py`, `store/**`, `retrieve.py`, `security.py` | their identity across modalities **is** the lesson |
+| `chunk.py`, `embed.py`, `store/**`, `retrieve.py`, **`security.py`'s logic** | their identity across modalities **is** the lesson |
+
+> **Carve-out:** `security.py`'s **`ENTITLEMENTS` map is data, not logic** — it must gain the new `gov-data` / `media` products (and the users entitled to them), or the non-text leak test has nothing to prove. Growing the trusted map is expected; changing `entitlement_filter` / `compose` / the fail-closed path is not.
 | The chunk id scheme `product_id:source:ordinal` | the golden set resolves against it |
 | `from rag_exp.ingest import SourceDoc` as an import path | `chunk.py:17` + `eval.py` depend on it; the package `__init__` re-exports so every call site is untouched |
 | `product_id` derived from the parent folder, mandatory, hard-error if underivable | SECURITY.md; the un-securable-chunk rule |
@@ -124,17 +126,27 @@ src/rag_exp/ingest/
 
 ---
 
-## Part D — Step 2: tabular `[probe-gated: library]`
+## Part D — Step 2: tabular ✅ wheel-probed
 
-CSV via stdlib `csv`; `.xlsx` via `openpyxl` (**probe x86_64-macOS wheels before pinning**). Decisions due **at this step**: the row→text serialization (row-as-sentence with header context is the working hypothesis — *measure it*), the granularity call (one `RawDoc` per row vs per sheet), and A.4's provenance shape. Metadata: `sheet`, `row`. `source` must be fully qualified per A.3.
+CSV via stdlib `csv`; `.xlsx` via **`openpyxl`** — **probed clean on x86_64-macOS** (throwaway `uv run --no-project --with openpyxl`, installed instantly, read `us-population-by-state.xlsx` fine). **No ADR-003 wall here**; pin it normally.
 
-## Part E — Steps 3–4: PDF, text layer then scanned `[probe-gated: library]`
+Decisions due **at this step**: the row→text serialization (row-as-sentence with header context is the working hypothesis — *measure it*), the granularity call (one `RawDoc` per row vs per sheet), and A.4's provenance shape. Metadata: `sheet`, `row`. `source` must be fully qualified per A.3.
 
-`pypdf` vs `pymupdf` (**ADR-003 redux — `pymupdf` wheel probe first**); then a Tesseract OCR fork when no text layer is detected. Page-level provenance; the per-page-vs-per-file granularity call from A.1 gets **decided by measurement** here. Layout gotchas (columns, headers/footers, tables) and OCR quality → `docs/history/`. Azure twin: Document Intelligence.
+⚠️ **Both corpus files have junk above the real header** — the CSV's line 1 is a title (real header on line 2, missing values are `***`); the XLSX's rows 1–4 are title text and a *split* header. A naive `DictReader`/`openpyxl` read yields garbage from both. That messiness is deliberate: it's what makes the serialization choice worth measuring. Details in `products/gov-data/README.md`.
+
+## Part E — Steps 3–4: PDF, text layer then scanned `[probe-gated: pymupdf/Tesseract]`
+
+**`pypdf` probed clean on x86_64-macOS** and confirmed `nist-cloud-computing-definition.pdf` carries a real text layer (522 chars off p.2) — so **step 3 has no wheel risk** if `pypdf` is enough. **`pymupdf` is still unprobed** (only needed if layout fidelity demands it); **Tesseract bindings unprobed** — ADR-003 redux applies to both.
+
+Page-level provenance; the per-page-vs-per-file granularity call from A.1 gets **decided by measurement** here. Layout gotchas (columns, headers/footers, tables) and OCR quality → `docs/history/`. Azure twin: Document Intelligence.
+
+**Step 4's scanned PDF is generated, not downloaded:** rasterize the NIST PDF to an image-only PDF. Archive.org scans mostly ship *with* an OCR text layer (wrong test), and the one text-layer-free NASA report found was 104 MB. Rasterizing our own makes the text-layer version the **ground truth**, so OCR error is *measured* rather than eyeballed.
 
 ## Part F — Steps 5–6: audio + video spikes `[probe-gated: library]`
 
-`faster-whisper` (`tiny`/`base`) on a ~60s clip → transcript + segment timestamps (**`ctranslate2` wheel probe first — the likeliest wall**); then `ffmpeg` audio extract reusing the audio loader. Small and scrappy on purpose: feel ASR + timestamped chunks. `[start, end]` timestamps are the hook the roadmap's transcript "video product" needs. Azure twins: AI Speech / Video Indexer.
+`faster-whisper` (`tiny`/`base`) on a ~60s clip → transcript + segment timestamps (**`ctranslate2` wheel probe first — still the likeliest wall**); then `ffmpeg` audio extract reusing the audio loader. Small and scrappy on purpose: feel ASR + timestamped chunks. `[start, end]` timestamps are the hook the roadmap's transcript "video product" needs. Azure twins: AI Speech / Video Indexer.
+
+**The clip is in place:** `products/media/hamlet-act1-librivox.mp3` — 62s of LibriVox *Hamlet* (Public Domain Mark 1.0). **Ground truth is free**: `products/shakespeare/hamlet.txt` is the verbatim Gutenberg text of the same play, so **ASR error is measurable against it** without hand-transcribing anything. The reference text stays in `shakespeare` and is not copied into `media`, so the two products' chunks never overlap and the leak test stays unambiguous. ⚠️ **`ffmpeg` is NOT installed on this box** — needed for step 6 (and possibly step 5 decoding, though `faster-whisper` bundles `av`).
 
 ---
 
@@ -142,7 +154,7 @@ CSV via stdlib `csv`; `.xlsx` via `openpyxl` (**probe x86_64-macOS wheels before
 
 | # | Question | Due |
 |---|---|---|
-| 1 | **Corpus strategy:** do new-format files go in a **new product folder** or into the **existing three**? Chunk ids are per-`source`, so existing ids are safe either way — **but the pooled collection means new rows compete in every query, so the `0.333` baseline moves for reasons unrelated to extraction quality.** New product = comparable baseline; existing product = a more realistic mixed-format product, but re-baseline first and say so. | **before step 2** |
+| 1 | ~~**Corpus strategy:** new product folder vs into the existing three?~~ **DECIDED — new folders.** Two new products, both committed and currently **inert** (no loader registered for their extensions ⇒ skipped, so the 990-chunk / `0.333` baseline is untouched until each loader lands): **`products/gov-data/`** (CSV + XLSX + PDF — the mixed-format product Part B's gate needs) and **`products/media/`** (audio, later video). Provenance + license in each folder's README; all files public domain. ⚠️ **The baseline moves the moment a loader registers** — new rows compete in every query. Re-baseline and record it in the same commit as each loader. | ~~before step 2~~ ✅ |
 | 2 | Provenance shape: typed fields vs `dict` (A.4) | step 2 |
 | 3 | Granularity per loader: per-page/row/segment vs per-file (A.1) | each loader's step |
 | 4 | Which format carries the **non-text leak test** (acceptance gate)? Cheapest credible candidate: tabular — no wheel risk, lands at step 2 | step 2 |
